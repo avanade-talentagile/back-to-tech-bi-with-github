@@ -1,0 +1,165 @@
+name: BI With GitHub Actions
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: 'Build'
+    runs-on: windows-latest  # For a list of available runner types, refer to
+                             # https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+    env:
+      SolutionPath: .\src\BI.With.GitHub.sln                         # Replace with your solution name, i.e. MyWpfApp.sln.
+      Configuration: Release
+    steps:
+    - name: 'Checkout'
+      uses: actions/checkout@v2
+    - name: 'Build the solution'
+      run: |
+          $vsinstalls = vswhere -all -prerelease -format json | ConvertFrom-Json
+          $vsPath = ($vsinstalls | Where-Object { $_.isPrerelease -eq $false -and $_.catalog.productLineVersion -eq 2019 })
+          New-Alias "MSBuild" (Join-Path $vsPath.installationPath "\MSBuild\Current\Bin\MSBuild.exe") -Force
+
+          msbuild ${{ env.SolutionPath }} -t:build -restore -p:RestorePackagesConfig=true -p:Configuration=${{ env.Configuration }}
+    - name: 'BI Artifacts'
+      uses: actions/upload-artifact@v2
+      with:
+        name: bi
+        path: |
+          src\**\*.dacpac
+          src\BI.With.GitHub.Cube\bin\Model.*
+          src\cube_postdeploy\*.*
+    - name: 'Test artifact'
+      uses: actions/upload-artifact@v2
+      with:
+        name: tests
+        path: .\src\*Tests\bin\${{ env.Configuration }}\**\*.*
+    - name: 'IaC artifact'
+      uses: actions/upload-artifact@v2
+      with:
+        name: iac
+        path: .\iac\*.*
+  sonarcloud:
+    name: 'SonarCloud analysis'
+    runs-on: ubuntu-latest
+    steps:
+    - name: 'Checkout'
+      uses: actions/checkout@v2
+    - name: 'SonarCloud Scan'
+      # You may pin to the exact commit or the version.
+      # uses: SonarSource/sonarcloud-github-action@de2e56b42aa84d0b1c5b622644ac17e505c9a049
+      uses: SonarSource/sonarcloud-github-action@v1.6
+      with:
+        # Additional arguments to the sonarcloud scanner
+        args: >
+          -Dsonar.organization=odeatavanade
+          -Dsonar.projectKey=backtotechsummer::github:bi
+          -Dsonar.scm.provider=git
+          -Dsonar.sources=src/
+        projectBaseDir: . # optional, default is .
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  deploy_dev:
+    name: 'Deploy on DEV'
+    runs-on: windows-latest
+    environment: DEV
+    needs: [build,sonarcloud]
+    if: github.event_name != 'pull_request' && success()
+    steps:
+    - name: 'Download tests'
+      uses: actions/download-artifact@v2
+      with:
+        name: tests
+        path: ${{ github.workspace }}/tests
+    - name: 'Download IaC'
+      uses: actions/download-artifact@v2
+      with:
+        name: iac
+        path: ${{ github.workspace }}/iac
+    - name: 'Download BI'
+      uses: actions/download-artifact@v2
+      with:
+        name: bi
+        path: ${{ github.workspace }}/bi
+    - name: 'Configure Bicep'
+      uses: cschleiden/replace-tokens@v1
+      with:
+        tokenPrefix: '__'
+        tokenSuffix: '__'
+        files: '["**/*.json"]'
+      env:
+        sql_server_name: fzoiefnzioefnzoeufhbzeuofhbfgn
+        analysis_server_name: izenuzehguehgpexhefd
+        analysis_server_admins: '["olivier.delmotte_avanade.com#EXT#@AvanadeAzurelive.onmicrosoft.com", "app:05d4ce29-6970-421b-8b9a-fcb86fa956c8@d7b671d8-de19-4f7f-956a-6d47e45b42ac"]'
+        sql_server_administrator_password: ${{ secrets.SqlServerAdminPassword }}
+    - name: 'Azure Login'
+      uses: Azure/login@v1
+      with:
+        # Paste output of `az ad sp create-for-rbac` as value of secret variable: AZURE_CREDENTIALS
+        creds: '${{ secrets.AZURE_CREDENTIALS }}'
+        # Set this value to true to enable Azure PowerShell Login in addition to Az CLI login
+        enable-AzPSSession: false # optional
+    - name: 'Run Bicep'
+      run: |
+        ${{ github.workspace }}/iac/deploy.ps1 -ResourceGroupName backtotechbi_dev
+      shell: pwsh
+      working-directory: ${{ github.workspace }}/iac
+    - name: 'Configure test parameters'
+      uses: cschleiden/replace-tokens@v1
+      with:
+        tokenPrefix: '__'
+        tokenSuffix: '__'
+        files: '["**/*.nbits", "**/*.tmsl"]'
+      env:
+        sql_server_administrator_password: ${{ secrets.SqlServerAdminPassword }}
+        app_id: '05d4ce29-6970-421b-8b9a-fcb86fa956c8'
+        tenant_id: 'd7b671d8-de19-4f7f-956a-6d47e45b42ac'
+        app_secret: ${{ secrets.AppSecret }}
+        DatawareHouseBis: ${{ secrets.DATAWAREHOUSEBIS }}
+    - name: 'Azure SQL Deploy'
+      uses: Azure/sql-action@v1
+      with:
+        server-name: ${{ env.sql_server_fqdn }}
+        connection-string: 'Data Source=${{ env.sql_server_fqdn }};Persist Security Info=True;Initial Catalog=AdventureWorksDW2017; User ID=${{ env.sql_server_administrator_login }}; Password=${{ secrets.SqlServerAdminPassword }}'
+        dacpac-package: '${{ github.workspace }}\bi\BI.With.GitHub.SQL.DW2017\bin\Release\BI.With.GitHub.SQL.DW2017.dacpac'
+    - name: 'Deploy Cube'
+      uses: odeatavanade/ssas-publish-model-action@main
+      with:
+        packagePath: '${{ github.workspace }}\bi\BI.With.GitHub.Cube\bin\Model.asdatabase'
+        modelName: 'CubeImport'
+        analysisInstance: ${{ env.analysis_server_fqdn }}
+        servicePrincipal: '${{ secrets.AZURE_CREDENTIALS }}'
+        postDeploymentScripts: '${{ github.workspace }}\bi\cube_postdeploy\1-set_sp_admin.tmsl,${{ github.workspace }}\bi\cube_postdeploy\2-update_data_source.tmsl,${{ github.workspace }}\bi\cube_postdeploy\3-process_full.tmsl'
+    - name: 'Run Tests'
+      run: |
+          $vsinstalls = vswhere -all -prerelease -format json | ConvertFrom-Json
+          $vsPath = ($vsinstalls | Where-Object { $_.isPrerelease -eq $false -and $_.catalog.productLineVersion -eq 2019 })
+          New-Alias "VSTest" (Join-Path $vsPath.installationPath "\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe") -Force
+
+          $nbi = Get-ChildItem -Include @('NBi.NUnit.Runtime.dll', '*Tests.dll') -Recurse
+
+          Write-Host "Found tests : $nbi" -ForegroundColor Cyan
+
+          if(!(Test-Path "${{ github.workspace }}\testresults\")){
+            New-Item -Path "${{ github.workspace }}\testresults\" -ItemType Directory | Out-Null
+          }
+          $TestResultDirectory = (Resolve-Path ${{ github.workspace }}\testresults\).Path
+
+          $nbi | ForEach-Object {
+            $item = Get-Item $_
+            Push-Location $item.Directory
+            VSTest "$_" --ResultsDirectory:"$TestResultDirectory" /logger:trx /logger:console
+            Pop-Location
+          }
+    - name: 'Publish tests results'
+      uses: actions/upload-artifact@v2
+      if: always()
+      with:
+        name: dev_test_result
+        path: .\testresults\**\*.*
+        if-no-files-found: warn

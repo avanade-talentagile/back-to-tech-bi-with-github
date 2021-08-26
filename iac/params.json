@@ -1,0 +1,14 @@
+{
+    "sql_server_name": {
+        "value": "__sql_server_name__"
+    },
+    "sql_server_administrator_password": {
+        "value": "__sql_server_administrator_password__"
+    },
+    "analysis_server_name": {
+        "value": "__analysis_server_name__"
+    },
+    "analysis_server_admins": {
+        "value": __analysis_server_admins__
+    }
+}

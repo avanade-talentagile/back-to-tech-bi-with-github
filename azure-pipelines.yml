@@ -1,0 +1,79 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+variables:
+  Configuration: Release
+pool:
+  vmImage: windows-latest
+stages:
+- stage: build
+  displayName: Build
+  jobs:
+  - job: build
+    displayName: Build
+    steps:
+    - task: VSBuild@1
+      inputs:
+        solution: '**\*.sln'
+        configuration: $(Configuration)
+        clean: true
+        maximumCpuCount: true
+        restoreNugetPackages: true
+    - task: CopyFiles@2
+      inputs:
+        Contents: '*Tests/bin/$(Configuration)/**/*'
+        SourceFolder: $(Build.SourcesDirectory)/src/
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/tests'
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/tests'
+        artifact: 'Tests'
+        publishLocation: 'pipeline'
+- stage: deploy_dev
+  dependsOn: build
+  displayName: Deploy on Dev
+  jobs:
+  - job: deploy_infra
+    displayName: Deploy infra
+    steps:
+    - checkout: none
+  - job: deploy_sql
+    displayName: Deploy SQL
+    dependsOn: deploy_infra
+    steps:
+    - checkout: none
+  - job: deploy_cube
+    displayName: Deploy cube
+    dependsOn: deploy_sql
+    steps:
+    - checkout: none
+  - job: run_tests
+    displayName: Run Tests
+    dependsOn: deploy_cube
+    variables:
+    - group: DEV
+    steps:
+    - checkout: none
+    - download: current
+      artifact: Tests
+    - task: qetza.replacetokens.replacetokens-task.replacetokens@3
+      displayName: 'Replace tokens in **\*.nbits'
+      inputs:
+        targetFiles: '$(Pipeline.Workspace)/**/*.nbits'
+        actionOnMissing: fail
+        tokenPrefix: '__'
+        tokenSuffix: '__'
+    - task: VSTest@2
+      inputs:
+        testSelector: 'testAssemblies'
+        testAssemblyVer2: |
+          **\*tests.dll
+          **\NBi.NUnit.Runtime.dll
+          !**\*TestAdapter.dll
+          !**\obj\**
+        searchFolder: '$(Pipeline.Workspace)'

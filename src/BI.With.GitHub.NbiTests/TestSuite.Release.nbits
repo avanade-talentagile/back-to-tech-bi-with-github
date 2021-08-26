@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--For more information on using transformations see the web.config examples at http://go.microsoft.com/fwlink/?LinkId=214134. -->
+<testSuite name="MyTestSuite" xmlns="http://NBi/TestSuite" xmlns:xdt="http://schemas.microsoft.com/XML-Document-Transform">
+  <settings>
+    <!-- <reference name="TestTraining_Cube" xdt:Transform="Replace" xdt:Locator="Match(name)">
+      <connectionString>__Cube__</connectionString>
+    </reference> -->
+    <reference name="TestTraining_Cube" xdt:Transform="Replace" xdt:Locator="Match(name)">
+      <connectionString>Provider=MSOLAP.4;Data Source=__analysis_server_fqdn__; Initial Catalog=CubeImport;User ID=app:__app_id__@__tenant_id__;Password=__app_secret__</connectionString>
+    </reference>
+    <reference name="AdventureWorkDW" xdt:Transform="Replace" xdt:Locator="Match(name)">
+      <connectionString>Data Source=__sql_server_fqdn__;Persist Security Info=True;Initial Catalog=AdventureWorksDW2017; User ID=__sql_server_administrator_login__; Password=__sql_server_administrator_password__</connectionString>
+    </reference>
+
+    <reference name="AdventureWorkDW_Bis" xdt:Transform="Replace" xdt:Locator="Match(name)">
+      <connectionString>__DatawareHouseBis__</connectionString>
+    </reference>
+  </settings>
+
+</testSuite>

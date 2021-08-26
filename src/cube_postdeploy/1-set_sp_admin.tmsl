@@ -1,0 +1,18 @@
+{
+  "createOrReplace": {
+    "object": {
+      "database": "CubeImport",
+      "role": "TestUser"
+    },
+    "role": {
+      "name": "TestUser",
+      "modelPermission": "administrator",
+      "members": [
+        {
+          "memberName": "app:__app_id__@__tenant_id__",
+          "identityProvider": "AzureAD"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.4.613.9944",
+      "templateHash": "17391909946758766193"
+    }
+  },
+  "parameters": {
+    "sql_server_name": {
+      "type": "string",
+      "defaultValue": "avanadebacktotechsummerbiwithgithub"
+    },
+    "analysis_server_name": {
+      "type": "string",
+      "defaultValue": "backtotechsummerbiwithgithubas"
+    }
+  },
+  "functions": [],
+  "resources": [
+    {
+      "type": "Microsoft.AnalysisServices/servers",
+      "apiVersion": "2017-08-01",
+      "name": "[parameters('analysis_server_name')]",
+      "location": "West Europe",
+      "sku": {
+        "name": "D1",
+        "tier": "Development",
+        "capacity": 1
+      },
+      "properties": {
+        "managedMode": 1,
+        "asAdministrators": {
+          "members": [
+            "olivier.delmotte_avanade.com#EXT#@olivierdatavanade.onmicrosoft.com"
+          ]
+        },
+        "querypoolConnectionMode": "All",
+        "serverMonitorMode": 1
+      }
+    },
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[parameters('sql_server_name')]",
+      "location": "westeurope",
+      "properties": {
+        "administratorLogin": "jesappelleroot",
+        "version": "12.0",
+        "minimalTlsVersion": "1.2",
+        "publicNetworkAccess": "Enabled",
+        "administrators": {
+          "administratorType": "ActiveDirectory",
+          "login": "olivier.delmotte@avanade.com Delmotte",
+          "sid": "986969a1-a05a-4301-a886-515573c2aaef",
+          "tenantId": "38ae7b6f-dca9-4e77-bb28-4767fae1ca4d"
+        },
+        "restrictOutboundNetworkAccess": "Disabled"
+      }
+    },
+    {
+      "type": "Microsoft.Sql/servers/databases",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[format('{0}/{1}', parameters('sql_server_name'), 'AdventureWorks2017')]",
+      "location": "westeurope",
+      "sku": {
+        "name": "Basic",
+        "tier": "Basic",
+        "capacity": 5
+      },
+      "properties": {
+        "collation": "SQL_Latin1_General_CP1_CI_AS",
+        "maxSizeBytes": 2147483648,
+        "catalogCollation": "SQL_Latin1_General_CP1_CI_AS",
+        "zoneRedundant": false,
+        "readScale": "Disabled",
+        "requestedBackupStorageRedundancy": "Local",
+        "maintenanceConfigurationId": "/subscriptions/e29c1147-dcf0-4fc3-8734-9e582e4dfed6/providers/Microsoft.Maintenance/publicMaintenanceConfigurations/SQL_Default",
+        "isLedgerOn": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', parameters('sql_server_name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers/databases",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[format('{0}/{1}', parameters('sql_server_name'), 'AdventureWorksDW2017')]",
+      "location": "westeurope",
+      "sku": {
+        "name": "Basic",
+        "tier": "Basic",
+        "capacity": 5
+      },
+      "properties": {
+        "collation": "SQL_Latin1_General_CP1_CI_AS",
+        "maxSizeBytes": 2147483648,
+        "catalogCollation": "SQL_Latin1_General_CP1_CI_AS",
+        "zoneRedundant": false,
+        "readScale": "Disabled",
+        "requestedBackupStorageRedundancy": "Local",
+        "maintenanceConfigurationId": "/subscriptions/e29c1147-dcf0-4fc3-8734-9e582e4dfed6/providers/Microsoft.Maintenance/publicMaintenanceConfigurations/SQL_Default",
+        "isLedgerOn": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', parameters('sql_server_name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers/databases",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[format('{0}/{1}', parameters('sql_server_name'), 'AdventureWorksDW2017_BIS')]",
+      "location": "westeurope",
+      "sku": {
+        "name": "Basic",
+        "tier": "Basic",
+        "capacity": 5
+      },
+      "properties": {
+        "collation": "SQL_Latin1_General_CP1_CI_AS",
+        "maxSizeBytes": 2147483648,
+        "catalogCollation": "SQL_Latin1_General_CP1_CI_AS",
+        "zoneRedundant": false,
+        "readScale": "Disabled",
+        "requestedBackupStorageRedundancy": "Local",
+        "maintenanceConfigurationId": "/subscriptions/e29c1147-dcf0-4fc3-8734-9e582e4dfed6/providers/Microsoft.Maintenance/publicMaintenanceConfigurations/SQL_Default",
+        "isLedgerOn": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', parameters('sql_server_name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers/firewallRules",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[format('{0}/{1}', parameters('sql_server_name'), 'AllowAllWindowsAzureIps')]",
+      "properties": {
+        "startIpAddress": "0.0.0.0",
+        "endIpAddress": "0.0.0.0"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', parameters('sql_server_name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers/firewallRules",
+      "apiVersion": "2021-02-01-preview",
+      "name": "[format('{0}/{1}', parameters('sql_server_name'), 'ODEHome')]",
+      "properties": {
+        "startIpAddress": "83.202.188.196",
+        "endIpAddress": "83.202.188.196"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', parameters('sql_server_name'))]"
+      ]
+    }
+  ]
+}

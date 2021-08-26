@@ -1,0 +1,206 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<testSuite name="MyTestSuite" xmlns="http://NBi/TestSuite">
+  <settings>
+    <!-- Cube connection -->
+    <reference name="TestTraining_Cube">
+      <connectionString>
+        Provider=MSOLAP.4;Data Source=TrainingAnalyti; Initial Catalog=TestTraining;  Integrated Security=SSPI
+      </connectionString>
+    </reference>
+
+    <!-- SQL connection -->
+    <reference name="AdventureWorkDW">
+      <connectionString>Provider=MSOLEDBSQL;Data Source=TrainingAnalyti;Initial Catalog=AdventureWorksDW2017; Integrated Security=SSPI</connectionString>
+    </reference>
+
+    <reference name="AdventureWorkDW_Bis">
+      <connectionString>Provider=MSOLEDBSQL;Data Source=TrainingAnalyti;Initial Catalog=AdventureWorksDW2017_BIS; Integrated Security=SSPI</connectionString>
+    </reference>
+
+    <csv-profile first-row-header="true" field-separator=","/>
+
+  </settings>
+
+  <!--define your tests here under-->
+  <!-- Existence du cube -->
+  <test name="Cube Existence">
+    <description>
+      Vérifier l'existance du cube TestTraining
+    </description>
+    <system-under-test>
+      <structure>
+        <perspective caption="Model"  connectionString="@TestTraining_Cube"/>
+      </structure>
+    </system-under-test>
+    <assert>
+      <exists />
+    </assert>
+  </test>
+
+  <test name="Existence tables DWH">
+    <description>
+      Vérifier l'existance des tables dans le DWH
+    </description>
+    <system-under-test>
+      <execution>
+        <query connectionString="@AdventureWorkDW">
+          SELECT [TABLE_NAME] FROM [INFORMATION_SCHEMA].[TABLES]
+        </query>
+      </execution>
+    </system-under-test>
+    <assert>
+      <equalTo keys="first" values-default-type="text">
+        <query connectionString="@AdventureWorkDW_Bis">
+          SELECT [TABLE_NAME] FROM [INFORMATION_SCHEMA].[TABLES]
+        </query>
+      </equalTo>
+    </assert>
+  </test>
+
+  <!--<test name="Volume DataWarehouse">
+    <description>
+      Tester le volume de données en DWH
+    </description>
+    <system-under-test>
+      <execution>
+        <query connectionString="@AdventureWorkDW">
+          SELECT
+          SUM(used_page_count) * 8.0 / 1024 AS "DB Size(MB)"
+          FROM sys.dm_db_partition_stats
+        </query>
+      </execution>
+    </system-under-test>
+    <assert>
+      <equalTo keys="first" values-default-type="text">
+        <query connectionString="@AdventureWorkDW_Bis">
+          SELECT
+          SUM(used_page_count) * 8.0 / 1024 AS "DB Size(MB)"
+          FROM sys.dm_db_partition_stats
+        </query>
+      </equalTo>
+    </assert>
+  </test>-->
+
+
+  <test name="SalesAmount égal">
+    <description>
+      Vérifier la valeur du SalesAmount entre DWH et DWH_BIS
+    </description>
+    <system-under-test>
+      <execution>
+        <query connectionString="@AdventureWorkDW">
+          SELECT pro.Color
+          ,SUM(SalesAmount) AS SalesAmount
+          FROM [dbo].[FactInternetSales] Fact
+          INNER JOIN DimProduct pro on pro.ProductKey=fact.ProductKey
+          group by pro.Color
+        </query>
+      </execution>
+    </system-under-test>
+    <assert>
+      <equalTo>
+        <column index="0" role="key" type="text"/>
+        <query connectionString="@AdventureWorkDW_Bis">
+          SELECT pro.Color
+          ,SUM(SalesAmount) AS SalesAmount
+          FROM [dbo].[FactInternetSales] Fact
+          INNER JOIN DimProduct pro on pro.ProductKey=fact.ProductKey
+          group by pro.Color
+        </query>
+      </equalTo>
+    </assert>
+  </test>
+
+  <test name="SalesAmount par couleur cube = csv">
+    <description>
+      Vérifier la valeur du SalesAmount par couleur de produit entre le fichier plat du métier et le cube
+    </description>
+    <system-under-test>
+      <result-set file=".\RefData\TestFile.csv"/>
+    </system-under-test>
+    <assert>
+      <equalTo>
+        <column index="0" role="key" type="text"/>
+        <query connectionString="@TestTraining_Cube">
+          <![CDATA[
+								EVALUATE 
+				SUMMARIZECOLUMNS(
+				DimProduct[Color],
+				"Total sales",'FactInternetSales'[Sales Amount - Internet Sales]
+				)
+				]]>
+        </query>
+      </equalTo>
+    </assert>
+  </test>
+
+
+  <test name="SalesAmount par couleur Excel=SQL  ">
+    <description>
+      Vérifier la valeur du SalesAmount par couleur de produit entre le fichier plat du métier et le DWH
+    </description>
+    <system-under-test>
+      <result-set file=".\RefData\TestFile.csv"/>
+    </system-under-test>
+    <assert>
+      <equalTo>
+        <column index="0" role="key" type="text"/>
+        <query connectionString="@AdventureWorkDW">
+          <![CDATA[SELECT pro.Color AS [Color]
+				,SUM(SalesAmount) AS [Sales Amount - Internet Sales]
+				FROM [dbo].[FactInternetSales] Fact
+				INNER JOIN DimProduct pro on pro.ProductKey=fact.ProductKey
+				group by pro.Color
+				]]>
+        </query>
+      </equalTo>
+    </assert>
+  </test>
+
+  <!--<test name="SalesAmount par ProductLine SQL = csv">
+    <description>
+      Vérifier la valeur du SalesAmount de 2013 par ProductLine entre le fichier plat du métier et le DWH
+    </description>
+    <system-under-test>
+      <result-set file=".\RefData\SalesAmount-ProductLine.csv"/>
+    </system-under-test>
+    <assert>
+      <equalTo>        
+        <column index="0" role="key" type="text"/>
+        <query connectionString="@AdventureWorkDW">
+          <![CDATA[SELECT pro.ProductLine AS [ProductLine]
+            ,SUM(SalesAmount) AS SalesAmount
+            FROM [dbo].[FactInternetSales] Fact
+            INNER JOIN DimProduct pro on pro.ProductKey=fact.ProductKey
+            inner join [DimDate] DT on DT.DateKey = Fact.OrderDateKey
+            where CalendarYear=2013
+            group by ProductLine
+            ]]>
+        </query>
+      </equalTo>
+    </assert>
+  </test>-->
+
+  <test name="Nombre de références de Produit vendues sur Internet">
+    <description>
+      Nombre de références de Produit vendues sur Internet
+    </description>
+    <system-under-test>
+      <execution>
+        <query connectionString="@AdventureWorkDW">
+          <![CDATA[ ;WITH CTE AS(SELECT FACT.ProductKey, COUNT(FACT.ProductKey) AS NB
+          FROM [dbo].[FactInternetSales] FACT
+          INNER JOIN [dbo].[DimProduct] PD ON PD.ProductKey=FACT.ProductKey
+          group BY FACT.ProductKey) SELECT COUNT(*) FROM CTE]]>
+        </query>
+      </execution>
+    </system-under-test>
+    <assert>
+      <equalTo keys="first" values-default-type="text">
+        <query connectionString="@AdventureWorkDW_Bis">
+          <![CDATA[ SELECT 158]]>
+        </query>
+      </equalTo>
+    </assert>
+  </test>
+</testSuite>
